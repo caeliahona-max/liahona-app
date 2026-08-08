@@ -2,7 +2,8 @@
 
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
-import { School, Eye, EyeOff } from "lucide-react";
+import Image from "next/image";
+import { Eye, EyeOff } from "lucide-react";
 import { useAuth } from "@/context/auth-context";
 import { Button } from "@/components/ui/Button";
 import Input from "@/components/ui/Input";
@@ -40,8 +41,14 @@ export function LoginForm() {
     <div className="min-h-screen flex">
       <div className="hidden lg:flex lg:w-1/2 bg-primary items-center justify-center p-12">
         <div className="text-center text-white">
-          <div className="flex items-center justify-center w-20 h-20 mx-auto rounded-2xl bg-accent mb-6">
-            <School className="w-10 h-10 text-primary-dark" />
+          <div className="flex items-center justify-center w-45 h-45 mx-auto rounded-2xl bg-white/10 p-3 mb-6 relative overflow-hidden">
+            <Image
+              src="/img/logo.png"
+              alt="Logo"
+              fill
+              className="object-contain p-2 rounded-2xl"
+              priority
+            />
           </div>
           <h1 className="text-4xl font-bold mb-4">Liahona</h1>
           <p className="text-lg text-white/70 max-w-md">
@@ -53,8 +60,14 @@ export function LoginForm() {
       <div className="flex-1 flex items-center justify-center px-6 bg-surface">
         <div className="w-full max-w-md">
           <div className="flex items-center justify-center gap-3 mb-8 lg:hidden">
-            <div className="flex items-center justify-center w-10 h-10 rounded-lg bg-primary">
-              <School className="w-6 h-6 text-accent" />
+            <div className="flex items-center justify-center w-22 h-22 rounded-lg bg-primary/10 relative overflow-hidden">
+              <Image
+                src="/img/logo.png"
+                alt="Logo"
+                fill
+                className="object-contain p-1"
+                priority
+              />
             </div>
             <span className="text-2xl font-bold text-primary">Liahona</span>
           </div>
@@ -91,7 +104,7 @@ export function LoginForm() {
                 <button
                   type="button"
                   onClick={() => setShowPassword(!showPassword)}
-                  className="absolute right-3 top-[38px] text-muted hover:text-primary transition-colors"
+                  className="absolute right-3 top-9.5 text-muted hover:text-primary transition-colors"
                 >
                   {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
                 </button>

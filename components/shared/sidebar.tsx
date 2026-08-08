@@ -7,11 +7,11 @@ import {
   Users,
   Calendar,
   DollarSign,
-  School,
   ChevronLeft,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useState } from "react";
+import Image from "next/image";
 
 const navItems = [
   { href: "/", label: "Dashboard", icon: LayoutDashboard },
@@ -32,8 +32,14 @@ export function Sidebar() {
       )}
     >
       <div className="flex items-center gap-3 px-4 h-16 border-b border-white/10">
-        <div className="flex items-center justify-center w-8 h-8 rounded-lg bg-accent flex-shrink-0">
-          <School className="w-5 h-5 text-primary-dark" />
+        <div className="flex items-center justify-center w-10 h-10 rounded-lg bg-white/10 overflow-hidden flex-shrink-0 relative">
+          <Image
+            src="/img/logo.png"
+            alt="Logo"
+            fill
+            className="object-contain p-1"
+            priority
+          />
         </div>
         {!collapsed && (
           <span className="font-bold text-lg tracking-tight">Liahona</span>
