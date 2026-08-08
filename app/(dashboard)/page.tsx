@@ -5,14 +5,26 @@ import { Users, DollarSign, Calendar, AlertCircle } from "lucide-react";
 import { Card } from "@/components/ui/Card";
 import { Badge } from "@/components/ui/Badge";
 import { getStudents, getPaymentsWithStudent, getEvents } from "@/services";
-import { Student, CalendarEvent, PaymentWithStudent } from "@/types";
+import { Student, ClassWithStudent, ClassStatus, PaymentWithStudent } from "@/types";
 import { format, isSameMonth } from "date-fns";
 import { es } from "date-fns/locale";
+
+const statusLabel: Record<ClassStatus, string> = {
+  confirmed: "Confirmada",
+  pending: "Pendiente",
+  cancelled: "Cancelada",
+};
+
+const statusVariant: Record<ClassStatus, "success" | "warning" | "danger"> = {
+  confirmed: "success",
+  pending: "warning",
+  cancelled: "danger",
+};
 
 export default function DashboardPage() {
   const [students, setStudents] = useState<Student[]>([]);
   const [payments, setPayments] = useState<PaymentWithStudent[]>([]);
-  const [events, setEvents] = useState<CalendarEvent[]>([]);
+  const [events, setEvents] = useState<ClassWithStudent[]>([]);
 
   useEffect(() => {
     getStudents().then(setStudents);
@@ -24,7 +36,7 @@ export default function DashboardPage() {
   const pendingPayments = payments.filter((p) => p.status !== "paid");
   const upcomingEvents = events.filter((e) => {
     const start = new Date(e.start_time);
-    return isSameMonth(start, new Date());
+    return isSameMonth(start, new Date()) && e.status !== "cancelled";
   });
 
   const totalIncome = payments
@@ -48,7 +60,7 @@ export default function DashboardPage() {
       color: "bg-green-50 text-success",
     },
     {
-      label: "Eventos este Mes",
+      label: "Clases este Mes",
       value: upcomingEvents.length,
       icon: Calendar,
       color: "bg-amber-50 text-warning",
@@ -107,10 +119,13 @@ export default function DashboardPage() {
                 </div>
               </div>
             ))}
+            {payments.length === 0 && (
+              <p className="text-sm text-muted text-center py-4">Sin pagos registrados</p>
+            )}
           </div>
         </Card>
 
-        <Card title="Próximos Eventos" subtitle="Agenda del mes">
+        <Card title="Próximas Clases" subtitle="Agenda del mes">
           <div className="space-y-3">
             {upcomingEvents.slice(0, 5).map((e) => (
               <div
@@ -119,57 +134,23 @@ export default function DashboardPage() {
               >
                 <div
                   className="w-2 h-full min-h-[40px] rounded-full flex-shrink-0"
-                  style={{ backgroundColor: getEventColor(e.color_theme) }}
+                  style={{ backgroundColor: e.status === "confirmed" ? "#16a34a" : "#f59e0b" }}
                 />
                 <div className="flex-1 min-w-0">
-                  <p className="text-sm font-medium">{e.title}</p>
+                  <p className="text-sm font-medium">{e.subject} — {e.student_name}</p>
                   <p className="text-xs text-muted">
                     {format(new Date(e.start_time), "d 'de' MMMM, HH:mm", { locale: es })}
                   </p>
                 </div>
-                <Badge variant={getEventVariant(e.type)}>
-                  {e.type === "exam"
-                    ? "Examen"
-                    : e.type === "holiday"
-                    ? "Feriado"
-                    : e.type === "meeting"
-                    ? "Reunión"
-                    : e.type === "event"
-                    ? "Evento"
-                    : "Clase"}
-                </Badge>
+                <Badge variant={statusVariant[e.status]}>{statusLabel[e.status]}</Badge>
               </div>
             ))}
+            {upcomingEvents.length === 0 && (
+              <p className="text-sm text-muted text-center py-4">Sin clases este mes</p>
+            )}
           </div>
         </Card>
       </div>
     </div>
   );
-}
-
-function getEventColor(theme: string) {
-  const colors: Record<string, string> = {
-    red: "#dc2626",
-    blue: "#2563eb",
-    green: "#16a34a",
-    yellow: "#f59e0b",
-    orange: "#ea580c",
-    purple: "#7c3aed",
-  };
-  return colors[theme] || colors.blue;
-}
-
-function getEventVariant(type: string): "default" | "success" | "warning" | "danger" | "accent" {
-  switch (type) {
-    case "exam":
-      return "danger";
-    case "holiday":
-      return "accent";
-    case "event":
-      return "success";
-    case "meeting":
-      return "warning";
-    default:
-      return "default";
-  }
 }

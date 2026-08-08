@@ -1,65 +1,92 @@
 "use client";
 
 import { createContext, useContext, useState, useEffect, ReactNode } from "react";
-
-interface User {
-  id: string;
-  email: string;
-  full_name: string;
-  role: "admin" | "teacher" | "staff";
-}
+import { Session } from "@supabase/supabase-js";
+import { supabase } from "@/lib/supabase/client";
+import { Profile } from "@/types";
 
 interface AuthContextType {
-  user: User | null;
+  user: Profile | null;
+  session: Session | null;
   isAuthenticated: boolean;
   loading: boolean;
-  login: (email: string, password: string) => Promise<boolean>;
-  logout: () => void;
+  login: (email: string, password: string) => Promise<{ success: boolean; error?: string }>;
+  logout: () => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextType>({
   user: null,
+  session: null,
   isAuthenticated: false,
   loading: true,
-  login: async () => false,
-  logout: () => {},
+  login: async () => ({ success: false }),
+  logout: async () => { },
 });
 
-const MOCK_USER: User = {
-  id: "u1",
-  email: "admin@liahona.edu",
-  full_name: "María Rodríguez",
-  role: "admin",
-};
+async function fetchProfile(userId: string): Promise<Profile | null> {
+  const { data, error } = await supabase
+    .from("profiles")
+    .select("*")
+    .eq("id", userId)
+    .single();
+
+  if (error) {
+    console.error("Error al cargar el perfil:", error.message);
+    return null;
+  }
+  return data as Profile;
+}
 
 export function AuthProvider({ children }: { children: ReactNode }) {
-  const [user, setUser] = useState<User | null>(null);
+  const [user, setUser] = useState<Profile | null>(null);
+  const [session, setSession] = useState<Session | null>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    const stored = localStorage.getItem("liahona_user");
-    if (stored) {
-      setUser(JSON.parse(stored));
-    }
-    setLoading(false);
+    // Carga la sesion existente al montar (refresh de pagina, etc.)
+    supabase.auth.getSession().then(async ({ data: { session } }) => {
+      setSession(session);
+      if (session?.user) {
+        const profile = await fetchProfile(session.user.id);
+        setUser(profile);
+      }
+      setLoading(false);
+    });
+
+    // Escucha cambios de sesion en tiempo real (login, logout, refresh de token)
+    const {
+      data: { subscription },
+    } = supabase.auth.onAuthStateChange(async (_event, session) => {
+      setSession(session);
+      if (session?.user) {
+        const profile = await fetchProfile(session.user.id);
+        setUser(profile);
+      } else {
+        setUser(null);
+      }
+    });
+
+    return () => subscription.unsubscribe();
   }, []);
 
-  const login = async (email: string, password: string): Promise<boolean> => {
-    if (email === "admin@liahona.edu" && password === "admin123") {
-      setUser(MOCK_USER);
-      localStorage.setItem("liahona_user", JSON.stringify(MOCK_USER));
-      return true;
+  const login = async (email: string, password: string) => {
+    const { error } = await supabase.auth.signInWithPassword({ email, password });
+    if (error) {
+      return { success: false, error: error.message };
     }
-    return false;
+    return { success: true };
   };
 
-  const logout = () => {
+  const logout = async () => {
+    await supabase.auth.signOut();
     setUser(null);
-    localStorage.removeItem("liahona_user");
+    setSession(null);
   };
 
   return (
-    <AuthContext.Provider value={{ user, isAuthenticated: !!user, loading, login, logout }}>
+    <AuthContext.Provider
+      value={{ user, session, isAuthenticated: !!session, loading, login, logout }}
+    >
       {children}
     </AuthContext.Provider>
   );
