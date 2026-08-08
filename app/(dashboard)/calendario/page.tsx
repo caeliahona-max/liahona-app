@@ -20,30 +20,43 @@ import { Badge } from "@/components/ui/Badge";
 import { Modal } from "@/components/ui/Modal";
 import Input from "@/components/ui/Input";
 import Select from "@/components/ui/Select";
-import { getEvents, createEvent, deleteEvent } from "@/services";
-import { CalendarEvent } from "@/types";
+import { getEvents, createEvent, updateEvent, deleteEvent, getStudents } from "@/services";
+import { ClassWithStudent, ClassStatus, Student } from "@/types";
 import { cn } from "@/lib/utils";
 
 const DAYS_OF_WEEK = ["Lun", "Mar", "Mié", "Jue", "Vie", "Sáb", "Dom"];
 
+const statusLabel: Record<ClassStatus, string> = {
+  confirmed: "Confirmada",
+  pending: "Pendiente",
+  cancelled: "Cancelada",
+};
+
+const statusBadgeVariant: Record<ClassStatus, "success" | "warning" | "danger"> = {
+  confirmed: "success",
+  pending: "warning",
+  cancelled: "danger",
+};
+
 export default function CalendarioPage() {
   const [currentMonth, setCurrentMonth] = useState(new Date());
-  const [events, setEvents] = useState<CalendarEvent[]>([]);
-  const [selectedDate, setSelectedDate] = useState<Date | null>(null);
-  const [selectedEvent, setSelectedEvent] = useState<CalendarEvent | null>(null);
+  const [events, setEvents] = useState<ClassWithStudent[]>([]);
+  const [students, setStudents] = useState<Student[]>([]);
+  const [selectedEvent, setSelectedEvent] = useState<ClassWithStudent | null>(null);
   const [createOpen, setCreateOpen] = useState(false);
   const [detailOpen, setDetailOpen] = useState(false);
+  const [error, setError] = useState("");
   const [form, setForm] = useState({
-    title: "",
-    description: "",
-    type: "event" as CalendarEvent["type"],
-    color_theme: "blue",
+    student_id: "",
+    subject: "",
+    meeting_link: "",
     start_time: "",
     end_time: "",
   });
 
   const load = useCallback(() => {
     getEvents().then(setEvents);
+    getStudents().then(setStudents);
   }, []);
 
   useEffect(() => {
@@ -63,31 +76,49 @@ export default function CalendarioPage() {
     events.filter((e) => isSameDay(new Date(e.start_time), date));
 
   const openDateClick = (date: Date) => {
-    setSelectedDate(date);
+    setError("");
     setForm({
-      title: "",
-      description: "",
-      type: "event",
-      color_theme: "blue",
+      student_id: students[0]?.id ?? "",
+      subject: "",
+      meeting_link: "",
       start_time: format(date, "yyyy-MM-dd") + "T09:00",
-      end_time: format(date, "yyyy-MM-dd") + "T11:00",
+      end_time: format(date, "yyyy-MM-dd") + "T10:00",
     });
     setCreateOpen(true);
   };
 
-  const openDetail = (event: CalendarEvent) => {
+  const openDetail = (event: ClassWithStudent) => {
     setSelectedEvent(event);
     setDetailOpen(true);
   };
 
   const handleCreate = async () => {
-    await createEvent({
-      ...form,
-      start_time: new Date(form.start_time).toISOString(),
-      end_time: new Date(form.end_time).toISOString(),
-    });
-    setCreateOpen(false);
-    load();
+    setError("");
+    if (!form.student_id) {
+      setError("Selecciona un alumno");
+      return;
+    }
+    try {
+      await createEvent({
+        student_id: form.student_id,
+        subject: form.subject,
+        start_time: new Date(form.start_time).toISOString(),
+        end_time: new Date(form.end_time).toISOString(),
+        meeting_link: form.meeting_link || null,
+      });
+      setCreateOpen(false);
+      load();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "No se pudo crear la clase");
+    }
+  };
+
+  const handleCancel = async () => {
+    if (selectedEvent) {
+      await updateEvent(selectedEvent.id, { status: "cancelled" });
+      setDetailOpen(false);
+      load();
+    }
   };
 
   const handleDelete = async () => {
@@ -159,13 +190,13 @@ export default function CalendarioPage() {
                         ev.stopPropagation();
                         openDetail(e);
                       }}
-                      className="text-[11px] px-1.5 py-0.5 rounded font-medium truncate cursor-pointer hover:opacity-80"
-                      style={{
-                        backgroundColor: getEventBg(e.color_theme),
-                        color: getEventTxt(e.color_theme),
-                      }}
+                      className={cn(
+                        "text-[11px] px-1.5 py-0.5 rounded font-medium truncate cursor-pointer hover:opacity-80",
+                        e.status === "cancelled" && "line-through opacity-60"
+                      )}
+                      style={getEventStyle(e.status)}
                     >
-                      {e.title}
+                      {e.subject} · {e.student_name}
                     </div>
                   ))}
                   {dayEvents.length > 3 && (
@@ -178,33 +209,25 @@ export default function CalendarioPage() {
         </div>
       </Card>
 
-      <Modal open={createOpen} onClose={() => setCreateOpen(false)} title="Nuevo Evento">
+      <Modal open={createOpen} onClose={() => setCreateOpen(false)} title="Nueva Clase">
         <div className="space-y-4">
-          <Input
-            id="title"
-            label="Titulo"
-            value={form.title}
-            onChange={(e) => setForm({ ...form, title: e.target.value })}
-            required
-          />
-          <Input
-            id="desc"
-            label="Descripción"
-            value={form.description}
-            onChange={(e) => setForm({ ...form, description: e.target.value })}
-          />
           <Select
-            id="type"
-            label="Tipo"
-            options={[
-              { value: "event", label: "Evento" },
-              { value: "class", label: "Clase" },
-              { value: "exam", label: "Examen" },
-              { value: "meeting", label: "Reunión" },
-              { value: "holiday", label: "Feriado" },
-            ]}
-            value={form.type}
-            onChange={(e) => setForm({ ...form, type: e.target.value as CalendarEvent["type"] })}
+            id="student"
+            label="Alumno"
+            options={
+              students.length > 0
+                ? students.map((s) => ({ value: s.id, label: s.full_name }))
+                : [{ value: "", label: "No tienes alumnos registrados" }]
+            }
+            value={form.student_id}
+            onChange={(e) => setForm({ ...form, student_id: e.target.value })}
+          />
+          <Input
+            id="subject"
+            label="Materia"
+            value={form.subject}
+            onChange={(e) => setForm({ ...form, subject: e.target.value })}
+            required
           />
           <div className="grid grid-cols-2 gap-4">
             <Input
@@ -224,33 +247,28 @@ export default function CalendarioPage() {
               required
             />
           </div>
-          <Select
-            id="color"
-            label="Color"
-            options={[
-              { value: "blue", label: "Azul" },
-              { value: "green", label: "Verde" },
-              { value: "red", label: "Rojo" },
-              { value: "yellow", label: "Amarillo" },
-              { value: "orange", label: "Naranja" },
-              { value: "purple", label: "Morado" },
-            ]}
-            value={form.color_theme}
-            onChange={(e) => setForm({ ...form, color_theme: e.target.value })}
+          <Input
+            id="meeting_link"
+            label="Enlace de reunión (opcional)"
+            value={form.meeting_link}
+            onChange={(e) => setForm({ ...form, meeting_link: e.target.value })}
           />
+          {error && (
+            <p className="text-sm text-danger text-center bg-red-50 rounded-lg py-2">{error}</p>
+          )}
           <div className="flex justify-end gap-3 pt-2">
             <Button variant="ghost" onClick={() => setCreateOpen(false)}>Cancelar</Button>
-            <Button onClick={handleCreate}>Crear Evento</Button>
+            <Button onClick={handleCreate}>Crear Clase</Button>
           </div>
         </div>
       </Modal>
 
-      <Modal open={detailOpen} onClose={() => setDetailOpen(false)} title={selectedEvent?.title || "Detalle"}>
+      <Modal open={detailOpen} onClose={() => setDetailOpen(false)} title={selectedEvent?.subject || "Detalle"}>
         {selectedEvent && (
           <div className="space-y-4">
             <div>
-              <p className="text-sm text-muted">Descripción</p>
-              <p className="text-sm">{selectedEvent.description || "Sin descripción"}</p>
+              <p className="text-sm text-muted">Alumno</p>
+              <p className="text-sm font-medium">{selectedEvent.student_name}</p>
             </div>
             <div className="grid grid-cols-2 gap-4">
               <div>
@@ -266,21 +284,29 @@ export default function CalendarioPage() {
                 </p>
               </div>
             </div>
+            {selectedEvent.meeting_link && (
+              <div>
+                <p className="text-sm text-muted">Enlace</p>
+                <a
+                  href={selectedEvent.meeting_link}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-sm text-primary underline break-all"
+                >
+                  {selectedEvent.meeting_link}
+                </a>
+              </div>
+            )}
             <div>
-              <p className="text-sm text-muted">Tipo</p>
-              <Badge variant={getBadgevariant(selectedEvent.type)}>
-                {selectedEvent.type === "exam"
-                  ? "Examen"
-                  : selectedEvent.type === "holiday"
-                  ? "Feriado"
-                  : selectedEvent.type === "meeting"
-                  ? "Reunión"
-                  : selectedEvent.type === "event"
-                  ? "Evento"
-                  : "Clase"}
+              <p className="text-sm text-muted">Estado</p>
+              <Badge variant={statusBadgeVariant[selectedEvent.status]}>
+                {statusLabel[selectedEvent.status]}
               </Badge>
             </div>
             <div className="flex justify-end gap-3 pt-2">
+              {selectedEvent.status !== "cancelled" && (
+                <Button variant="ghost" onClick={handleCancel}>Cancelar Clase</Button>
+              )}
               <Button variant="danger" onClick={handleDelete}>Eliminar</Button>
             </div>
           </div>
@@ -290,22 +316,12 @@ export default function CalendarioPage() {
   );
 }
 
-function getEventBg(theme: string) {
-  const c: Record<string, string> = { red: "#fecaca", blue: "#bfdbfe", green: "#bbf7d0", yellow: "#fef08a", orange: "#fed7aa", purple: "#ddd6fe" };
-  return c[theme] || c.blue;
-}
-
-function getEventTxt(theme: string) {
-  const c: Record<string, string> = { red: "#991b1b", blue: "#1e3a5f", green: "#14532d", yellow: "#713f12", orange: "#7c2d12", purple: "#4c1d95" };
-  return c[theme] || c.blue;
-}
-
-function getBadgevariant(type: string): "default" | "success" | "warning" | "danger" | "accent" {
-  switch (type) {
-    case "exam": return "danger";
-    case "holiday": return "accent";
-    case "event": return "success";
-    case "meeting": return "warning";
-    default: return "default";
-  }
+function getEventStyle(status: ClassStatus): React.CSSProperties {
+  const map: Record<ClassStatus, { bg: string; text: string }> = {
+    confirmed: { bg: "#bbf7d0", text: "#14532d" },
+    pending: { bg: "#fef08a", text: "#713f12" },
+    cancelled: { bg: "#e5e7eb", text: "#4b5563" },
+  };
+  const c = map[status];
+  return { backgroundColor: c.bg, color: c.text };
 }

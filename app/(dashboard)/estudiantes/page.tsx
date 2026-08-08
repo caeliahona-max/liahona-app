@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Plus, Search } from "lucide-react";
+import { Plus, Search, Trash2 } from "lucide-react";
 import { Card } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
 import { Badge } from "@/components/ui/Badge";
@@ -9,23 +9,23 @@ import { Table } from "@/components/ui/Table";
 import { Modal } from "@/components/ui/Modal";
 import Input from "@/components/ui/Input";
 import Select from "@/components/ui/Select";
-import { getStudents, createStudent, updateStudent } from "@/services";
+import { getStudents, createStudent, updateStudent, deleteStudent } from "@/services";
 import { Student } from "@/types";
 
 const statusVariantMap: Record<Student["status"], "success" | "danger" | "warning"> = {
   active: "success",
   inactive: "danger",
-  suspended: "warning",
+  pending: "warning",
 };
 
 const statusLabelMap: Record<Student["status"], string> = {
   active: "Activo",
   inactive: "Inactivo",
-  suspended: "Suspendido",
+  pending: "Pendiente",
 };
 
 const gradeOptions = [
-  { value: "", label: "Todos los grados" },
+  { value: "", label: "Todos los niveles" },
   { value: "1er Grado", label: "1er Grado" },
   { value: "2do Grado", label: "2do Grado" },
   { value: "3er Grado", label: "3er Grado" },
@@ -40,38 +40,37 @@ export default function EstudiantesPage() {
   const [gradeFilter, setGradeFilter] = useState("");
   const [modalOpen, setModalOpen] = useState(false);
   const [selectedStudent, setSelectedStudent] = useState<Student | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<Student | null>(null);
+  const [deleteError, setDeleteError] = useState("");
   const [form, setForm] = useState({
-    first_name: "",
-    last_name: "",
-    email: "",
-    phone: "",
-    birth_date: "",
-    group_or_grade: "3er Grado",
+    full_name: "",
+    academic_level: "3er Grado",
+    subjects: "", // se maneja como texto separado por comas en el formulario
     status: "active" as Student["status"],
+    notes: "",
   });
 
+  const load = () => getStudents().then(setStudents);
+
   useEffect(() => {
-    getStudents().then(setStudents);
+    load();
   }, []);
 
   const filtered = students.filter((s) => {
     const matchesSearch =
-      search === "" ||
-      `${s.first_name} ${s.last_name}`.toLowerCase().includes(search.toLowerCase());
-    const matchesGrade = gradeFilter === "" || s.group_or_grade === gradeFilter;
+      search === "" || s.full_name.toLowerCase().includes(search.toLowerCase());
+    const matchesGrade = gradeFilter === "" || s.academic_level === gradeFilter;
     return matchesSearch && matchesGrade;
   });
 
   const openCreate = () => {
     setSelectedStudent(null);
     setForm({
-      first_name: "",
-      last_name: "",
-      email: "",
-      phone: "",
-      birth_date: "",
-      group_or_grade: "3er Grado",
+      full_name: "",
+      academic_level: "3er Grado",
+      subjects: "",
       status: "active",
+      notes: "",
     });
     setModalOpen(true);
   };
@@ -79,56 +78,86 @@ export default function EstudiantesPage() {
   const openEdit = (student: Student) => {
     setSelectedStudent(student);
     setForm({
-      first_name: student.first_name,
-      last_name: student.last_name,
-      email: student.email,
-      phone: student.phone,
-      birth_date: student.birth_date,
-      group_or_grade: student.group_or_grade,
+      full_name: student.full_name,
+      academic_level: student.academic_level,
+      subjects: student.subjects.join(", "),
       status: student.status,
+      notes: student.notes ?? "",
     });
     setModalOpen(true);
   };
 
   const handleSubmit = async () => {
+    const payload = {
+      full_name: form.full_name,
+      academic_level: form.academic_level,
+      subjects: form.subjects
+        .split(",")
+        .map((s) => s.trim())
+        .filter(Boolean),
+      status: form.status,
+      notes: form.notes || null,
+      avatar_url: null,
+    };
+
     if (selectedStudent) {
-      await updateStudent(selectedStudent.id, form);
+      await updateStudent(selectedStudent.id, payload);
     } else {
-      await createStudent(form);
+      await createStudent(payload);
     }
     setModalOpen(false);
-    getStudents().then(setStudents);
+    load();
+  };
+
+  const openDeleteConfirm = (student: Student) => {
+    setDeleteError("");
+    setDeleteTarget(student);
+  };
+
+  const handleDelete = async () => {
+    if (!deleteTarget) return;
+    setDeleteError("");
+    try {
+      await deleteStudent(deleteTarget.id);
+      setDeleteTarget(null);
+      load();
+    } catch (err) {
+      setDeleteError(err instanceof Error ? err.message : "No se pudo eliminar el alumno");
+    }
   };
 
   const columns = [
     { key: "name", label: "Nombre" },
-    { key: "grade", label: "Grado" },
-    { key: "phone", label: "Teléfono" },
+    { key: "grade", label: "Nivel" },
+    { key: "subjects", label: "Materias" },
     { key: "status", label: "Estado" },
     { key: "actions", label: "" },
   ];
 
   const tableData = filtered.map((s) => ({
     id: s.id,
-    name: (
-      <div>
-        <p className="font-medium text-primary">
-          {s.first_name} {s.last_name}
-        </p>
-        <p className="text-xs text-muted">{s.email}</p>
-      </div>
-    ),
-    grade: <span className="text-sm">{s.group_or_grade}</span>,
-    phone: <span className="text-sm text-muted">{s.phone}</span>,
+    name: <p className="font-medium text-primary">{s.full_name}</p>,
+    grade: <span className="text-sm">{s.academic_level}</span>,
+    subjects: <span className="text-sm text-muted">{s.subjects.join(", ") || "—"}</span>,
     status: (
       <Badge variant={statusVariantMap[s.status]}>
         {statusLabelMap[s.status]}
       </Badge>
     ),
     actions: (
-      <Button variant="ghost" size="sm" onClick={(e) => { e.stopPropagation(); openEdit(s); }}>
-        Editar
-      </Button>
+      <div className="flex items-center gap-1">
+        <Button variant="ghost" size="sm" onClick={(e) => { e.stopPropagation(); openEdit(s); }}>
+          Editar
+        </Button>
+        <Button
+          variant="ghost"
+          size="sm"
+          onClick={(e) => { e.stopPropagation(); openDeleteConfirm(s); }}
+          className="text-danger hover:bg-red-50"
+        >
+          <Trash2 className="w-4 h-4" />
+        </Button>
+      </div>
     ),
   }));
 
@@ -175,59 +204,43 @@ export default function EstudiantesPage() {
         title={selectedStudent ? "Editar Estudiante" : "Nuevo Estudiante"}
       >
         <div className="space-y-4">
-          <div className="grid grid-cols-2 gap-4">
-            <Input
-              id="first_name"
-              label="Nombre"
-              value={form.first_name}
-              onChange={(e) => setForm({ ...form, first_name: e.target.value })}
-              required
-            />
-            <Input
-              id="last_name"
-              label="Apellido"
-              value={form.last_name}
-              onChange={(e) => setForm({ ...form, last_name: e.target.value })}
-              required
-            />
-          </div>
           <Input
-            id="email"
-            label="Correo electrónico"
-            type="email"
-            value={form.email}
-            onChange={(e) => setForm({ ...form, email: e.target.value })}
-          />
-          <Input
-            id="phone"
-            label="Teléfono"
-            value={form.phone}
-            onChange={(e) => setForm({ ...form, phone: e.target.value })}
-          />
-          <Input
-            id="birth_date"
-            label="Fecha de nacimiento"
-            type="date"
-            value={form.birth_date}
-            onChange={(e) => setForm({ ...form, birth_date: e.target.value })}
+            id="full_name"
+            label="Nombre completo"
+            value={form.full_name}
+            onChange={(e) => setForm({ ...form, full_name: e.target.value })}
+            required
           />
           <Select
             id="grade"
-            label="Grado"
+            label="Nivel académico"
             options={gradeOptions.filter((g) => g.value !== "")}
-            value={form.group_or_grade}
-            onChange={(e) => setForm({ ...form, group_or_grade: e.target.value })}
+            value={form.academic_level}
+            onChange={(e) => setForm({ ...form, academic_level: e.target.value })}
+          />
+          <Input
+            id="subjects"
+            label="Materias (separadas por comas)"
+            placeholder="Matemáticas, Ciencias, Inglés"
+            value={form.subjects}
+            onChange={(e) => setForm({ ...form, subjects: e.target.value })}
           />
           <Select
             id="status"
             label="Estado"
             options={[
               { value: "active", label: "Activo" },
+              { value: "pending", label: "Pendiente" },
               { value: "inactive", label: "Inactivo" },
-              { value: "suspended", label: "Suspendido" },
             ]}
             value={form.status}
             onChange={(e) => setForm({ ...form, status: e.target.value as Student["status"] })}
+          />
+          <Input
+            id="notes"
+            label="Notas"
+            value={form.notes}
+            onChange={(e) => setForm({ ...form, notes: e.target.value })}
           />
           <div className="flex justify-end gap-3 pt-2">
             <Button variant="ghost" onClick={() => setModalOpen(false)}>
@@ -238,6 +251,32 @@ export default function EstudiantesPage() {
             </Button>
           </div>
         </div>
+      </Modal>
+
+      <Modal
+        open={!!deleteTarget}
+        onClose={() => setDeleteTarget(null)}
+        title="Eliminar Estudiante"
+      >
+        {deleteTarget && (
+          <div className="space-y-4">
+            <p className="text-sm">
+              ¿Seguro que quieres eliminar a{" "}
+              <span className="font-semibold">{deleteTarget.full_name}</span>? Esta acción no se puede deshacer.
+            </p>
+            {deleteError && (
+              <p className="text-sm text-danger text-center bg-red-50 rounded-lg py-2">{deleteError}</p>
+            )}
+            <div className="flex justify-end gap-3 pt-2">
+              <Button variant="ghost" onClick={() => setDeleteTarget(null)}>
+                Cancelar
+              </Button>
+              <Button variant="danger" onClick={handleDelete}>
+                Eliminar
+              </Button>
+            </div>
+          </div>
+        )}
       </Modal>
     </div>
   );

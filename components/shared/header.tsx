@@ -40,7 +40,7 @@ export function Header() {
           </div>
           <div className="hidden sm:block">
             <p className="text-sm font-medium text-primary">{user?.full_name}</p>
-            <p className="text-xs text-muted">{user?.role}</p>
+            <p className="text-xs text-muted">{user?.email}</p>
           </div>
         </div>
 

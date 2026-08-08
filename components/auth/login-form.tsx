@@ -28,11 +28,13 @@ export function LoginForm() {
     setError("");
     setLoading(true);
 
-    const success = await login(email, password);
-    if (success) {
+    const result = await login(email, password);
+    if (result.success) {
       router.replace("/");
     } else {
-      setError("Correo o contraseña incorrectos");
+      setError(result.error === "Invalid login credentials"
+        ? "Correo o contraseña incorrectos"
+        : result.error ?? "No se pudo iniciar sesión");
     }
     setLoading(false);
   };
@@ -125,9 +127,6 @@ export function LoginForm() {
               </Button>
             </form>
 
-            <p className="text-xs text-muted text-center mt-6">
-              Demo: admin@liahona.edu / admin123
-            </p>
           </div>
         </div>
       </div>
